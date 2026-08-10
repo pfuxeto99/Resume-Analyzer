@@ -80,7 +80,12 @@ public class ClassificationTask implements Runnable {
 			recommendation = "CV matches strong profiles.";
 		}
 
-		
+		design.setClassificationResult(
+		        finalStatus,
+		        recommendation,
+		        knnLabel,
+		        clusterCount
+		);
 		
 		
 	}

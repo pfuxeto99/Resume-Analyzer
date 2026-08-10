@@ -60,7 +60,6 @@ public class FeatureExtracter {
     	if (cleanText.contains("experience")){
     		
     		// the person has experience , their cv can be 2 pages 
-    		
 
     		if (document.getNumberOfPages()>=3) {
     			
@@ -97,6 +96,7 @@ public class FeatureExtracter {
         
         
        // normalising the text to lower case 
+        
         String cleanText = text.toLowerCase().trim();
         
         features.put("skills", cleanText.contains("skills") ? 1.0 : 0.0);
@@ -117,7 +117,6 @@ public class FeatureExtracter {
           
         double[] featureVector = new double[7];
 
-       
         featureVector[0] = map.getOrDefault("skills", 0.0);
         featureVector[1] = map.getOrDefault("education", 0.0);
         featureVector[2] = map.getOrDefault("projects", 0.0);

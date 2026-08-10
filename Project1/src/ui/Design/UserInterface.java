@@ -15,8 +15,12 @@ import javafx.stage.FileChooser;
 import javafx.scene.input.TransferMode;
 import java.io.File;
 import java.util.Map;
+import data.Structures.Graph;
+import image.Classify.ClassificationTask;
+import image.Classify.Classifyer;
 
-// Importing your logic class
+
+
 import feature.Extraction.FeatureExtracter;
 
 public class UserInterface {
@@ -28,11 +32,36 @@ public class UserInterface {
 	
 	private File lastUploadedFile;
 	private FeatureExtracter extractor = new FeatureExtracter();
+	
+	private String finalStatus;
+	private String recommendation;
+	private String knnLabel;
+	private int clusterCount;
 
 	private Button btnUpload;
 	private Button btnStructure;
 	private Button btnScore;
 	private Button btnRecommendations;
+	
+	private Graph trainingGraph;
+	private Classifyer classifier;
+	
+	public UserInterface(Graph trainingGraph, Classifyer classifier) {
+	    this.trainingGraph = trainingGraph;
+	    this.classifier = classifier;
+	}
+	public void setClassificationResult(
+	        String finalStatus,
+	        String recommendation,
+	        String knnLabel,
+	        int clusterCount) {
+
+	    this.finalStatus = finalStatus;
+	    this.recommendation = recommendation;
+	    this.knnLabel = knnLabel;
+	    this.clusterCount = clusterCount;
+	}
+	
 
 	public Parent createContent() {
 		VBox root = new VBox();
@@ -90,7 +119,10 @@ public class UserInterface {
 		});
 		btnScore.setOnAction(e -> {
 			if (isUploaded)
-				showScoreView();
+				showScoreView( finalStatus,
+		                recommendation,
+		                knnLabel,
+		                clusterCount);
 		});
 		btnRecommendations.setOnAction(e -> {
 			if (isUploaded)
@@ -121,15 +153,31 @@ public class UserInterface {
 	}
 
 	private void handleFileSelection(VBox root) {
-		FileChooser fileChooser = new FileChooser();
-		fileChooser.setTitle("Select Resume PDF");
-		fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
-		File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
-		if (selectedFile != null) {
-			isUploaded = true;
-			lastUploadedFile = selectedFile;
-			showUploadSuccessView();
-		}
+		 FileChooser fileChooser = new FileChooser();
+		    fileChooser.setTitle("Select Resume PDF");
+		    fileChooser.getExtensionFilters().add(
+		        new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
+		    );
+
+		    File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
+
+		    if (selectedFile != null) {
+		        isUploaded = true;
+		        lastUploadedFile = selectedFile;
+
+		        showUploadSuccessView();
+
+		        ClassificationTask task = new ClassificationTask(
+		            selectedFile,
+		            this,
+		            trainingGraph,
+		            classifier
+		        );
+
+		        Thread classificationThread = new Thread(task);
+		        classificationThread.setDaemon(true);
+		        classificationThread.start();
+		    }
 	}
 
 	private void showInitialUploadView() {
@@ -333,37 +381,136 @@ public class UserInterface {
 		return createCard(cardTitle, cardBody, styleClass);
 	}
 
-	private void showScoreView() {
-		resetButtonStyles();
-		btnScore.getStyleClass().add("active");
-		VBox view = new VBox(15);
-		Label title = new Label("ATS Match Score");
-		title.getStyleClass().add("view-title");
-		HBox layout = new HBox(25);
-		layout.setAlignment(Pos.CENTER_LEFT);
-		StackPane circleStack = new StackPane();
-		Circle bgCircle = new Circle(75, Color.web("#1e293b"));
-		Arc scoreArc = new Arc(0, 0, 75, 75, 90, -93.6);
-		scoreArc.setType(ArcType.ROUND);
-		scoreArc.setFill(Color.web("#ef4444"));
-		Circle innerCircle = new Circle(60, Color.web("#0b1220"));
-		VBox scoreText = new VBox(new Label("26%"), new Label("ATS Match"));
-		((Label) scoreText.getChildren().get(0))
-				.setStyle("-fx-font-size: 28px; -fx-font-weight: 800; -fx-text-fill: #f1f5f9;");
-		((Label) scoreText.getChildren().get(1)).setStyle("-fx-font-size: 11px; -fx-text-fill: #94a3b8;");
-		scoreText.setAlignment(Pos.CENTER);
-		circleStack.getChildren().addAll(bgCircle, scoreArc, innerCircle, scoreText);
-		VBox stats = new VBox(10);
-		Label riskLabel = new Label("HIGH FILTER RISK");
-		riskLabel.setStyle("-fx-text-fill: #ef4444; -fx-font-weight: bold; -fx-font-size: 12px;");
-		stats.getChildren().addAll(riskLabel, createStatBar("Technical Keywords", "26%", "red-bar", 0.26),
-				createStatBar("Layout Quality", "40%", "blue-bar", 0.40),
-				createStatBar("Education Detection", "72%", "green-bar", 0.72));
-		layout.getChildren().addAll(circleStack, stats);
-		view.getChildren().addAll(title, layout);
-		contentArea.getChildren().setAll(view);
-	}
+	private void showScoreView(String finalStatus, String recommendation, String knnLabel, int clusterCount) {
 
+	    resetButtonStyles();
+	    btnScore.getStyleClass().add("active");
+
+	    VBox view = new VBox(20);
+	    view.setPadding(new Insets(20));
+
+	    Label title = new Label("CV Analysis");
+	    title.getStyleClass().add("view-title");
+
+	    HBox layout = new HBox(30);
+	    layout.setAlignment(Pos.CENTER_LEFT);
+
+
+
+	    StackPane circleStack = new StackPane();
+
+	    Circle bgCircle = new Circle(75, Color.web("#1e293b"));
+
+	    boolean lowQuality = finalStatus.equalsIgnoreCase("LOW QUALITY CV");
+
+	    Color statusColor = lowQuality
+	            ? Color.web("#ef4444")
+	            : Color.web("#22c55e");
+
+	    Arc scoreArc = new Arc(
+	            0,
+	            0,
+	            75,
+	            75,
+	            90,
+	            lowQuality ? -90 : -270
+	    );
+
+	    scoreArc.setType(ArcType.ROUND);
+	    scoreArc.setFill(statusColor);
+
+	    Circle innerCircle = new Circle(60, Color.web("#0b1220"));
+
+	    Label statusLabel = new Label(
+	            lowQuality ? "LOW" : "HIGH"
+	    );
+
+	    statusLabel.setStyle(
+	            "-fx-font-size: 24px;" +
+	            "-fx-font-weight: 800;" +
+	            "-fx-text-fill: " +
+	            (lowQuality ? "#ef4444;" : "#22c55e;")
+	    );
+
+	    Label cvLabel = new Label("CV QUALITY");
+
+	    cvLabel.setStyle(
+	            "-fx-font-size: 10px;" +
+	            "-fx-text-fill: #94a3b8;"
+	    );
+
+	    VBox scoreText = new VBox(2, statusLabel, cvLabel);
+	    scoreText.setAlignment(Pos.CENTER);
+
+	    circleStack.getChildren().addAll(
+	            bgCircle,
+	            scoreArc,
+	            innerCircle,
+	            scoreText
+	    );
+
+
+	    VBox stats = new VBox(12);
+
+	    Label classificationLabel = new Label(
+	            "CLASSIFICATION: " + knnLabel.toUpperCase()
+	    );
+
+	    classificationLabel.setStyle(
+	            "-fx-text-fill: " +
+	            (lowQuality ? "#ef4444;" : "#22c55e;") +
+	            "-fx-font-weight: bold;" +
+	            "-fx-font-size: 12px;"
+	    );
+
+	    Label qualityLabel = new Label(finalStatus);
+
+	    qualityLabel.setStyle(
+	            "-fx-text-fill: #f1f5f9;" +
+	            "-fx-font-size: 18px;" +
+	            "-fx-font-weight: bold;"
+	    );
+
+	    Label similarLabel = new Label(
+	            "Similar CV profiles: " + clusterCount
+	    );
+
+	    similarLabel.setStyle(
+	            "-fx-text-fill: #94a3b8;" +
+	            "-fx-font-size: 13px;"
+	    );
+
+	    Label recommendationLabel = new Label(
+	            recommendation
+	    );
+
+	    recommendationLabel.setWrapText(true);
+	    recommendationLabel.setMaxWidth(350);
+
+	    recommendationLabel.setStyle(
+	            "-fx-text-fill: #cbd5e1;" +
+	            "-fx-font-size: 13px;"
+	    );
+
+	    stats.getChildren().addAll(
+	            classificationLabel,
+	            qualityLabel,
+	            similarLabel,
+	            recommendationLabel
+	    );
+
+	    layout.getChildren().addAll(
+	            circleStack,
+	            stats
+	    );
+
+	    view.getChildren().addAll(
+	            title,
+	            layout
+	    );
+
+	    contentArea.getChildren().setAll(view);
+	}
 	private void showRecommendationsView() {
 		resetButtonStyles();
 		btnRecommendations.getStyleClass().add("active");
